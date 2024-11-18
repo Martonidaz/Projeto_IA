@@ -1,0 +1,156 @@
+# Passo 1: Carregar o dataset
+import pandas as pd
+
+dados = pd.read_csv("Historico_de_materias.csv")
+# Para exibir somente os tipos de assunto
+valores_unicos = dados['assunto'].unique()
+
+print("Valores únicos na coluna 'assunto':")
+print(valores_unicos)
+# Passo 2: Criar um novo dataframe somente para o assunto 'esporte'
+dados_esportes = dados[dados['assunto'] == 'esportes']
+# Passo 3: Carregar spaCy
+# Biblioteca de processamento de linguagem natural para tarefas como tokenização, 
+# lematização entre outras.
+import spacy
+
+# Modelo pré-treinado otimizado para a língua portuguesa
+nlp = spacy.load("pt_core_news_sm")
+# Passo 4: Configurar palavras de parada
+
+# Essa biblioteca oferece ferramentas para análise de texto, como stemmers (radicalizadores),
+#  stopwords, tokenizadores, e entre outras funções
+import nltk
+
+# Importa o conjunto de palavras de parada
+from nltk.corpus import stopwords
+
+# Verificar stopwords
+# lista padrão da biblioteca pré-definida de palavras irrelevantes
+nltk.download('stopwords')
+
+# Carrega as stopwords em português do NLTK e as converte em um conjunto Python
+api_stop_words = set(stopwords.words('portuguese'))
+# Incluir vogais isoladas não parece contribuir para o significado.
+minhas_stop_words = {'a', 'e', 'i', 'o', 'u'}
+# Combinação das palavras de parada padrão do NLTK com "minhas_stop_words" 
+stop_words = api_stop_words | minhas_stop_words
+# Passo 5: Função de tratamento de texto
+
+# Biblioteca padrão do Python para expressões regulares
+import re
+
+# Expressões regulares permitem manipular e encontrar padrões em strings, 
+# como remover caracteres indesejados ou verificar formatos específicos (ex.: datas, e-mails).
+# Para realizar a limpeza do texto removendo caracteres que não sejam letras ou espaços.
+
+# função usada para pré-processar textos antes de realizar análises mais avançadas.
+def tratamento_pln(texto):
+    # Converte todo o texto para letras minúsculas
+    texto = texto.lower()
+    # Substitui todos os caracteres indesejados por uma string vazia
+    texto = re.sub(r'[^a-zA-Záéíóú\s]', '', texto)
+    # Lematiza as palavras de acordo com o pipeline da spacy e divide o texto em tokens
+    doc = nlp(texto)
+    # Cria uma lista de palavras tratadas que não são pontuações nem stopwords
+    clean_tokens = [token.lemma_ for token in doc if token.text not in stop_words and not token.is_punct]
+    # Combina a lista de palavras limpas (clean_tokens) em uma única string
+    clean_text = ' '.join(clean_tokens)
+    return clean_text
+# Visualizando as Stop Words
+print("Tamanho do conjunto stop_words:",len(stop_words),"\nStop_words ordenadas: \n",sorted(list(stop_words)))
+# Aplicar o tratamento
+# Usada para dividir um texto grande em partes menores (chunks) de tamanho controlado.
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# Substitui valores ausentes por uma string vazia e converte todos os valores da coluna 
+# "conteudo_noticia" para o tipo string
+dados_esportes['conteudo_noticia'] = dados_esportes['conteudo_noticia'].fillna("").astype(str)
+# Aplica a função tratamento_pln para cada valor na coluna "conteudo_noticia"
+dados_esportes['conteudo_tratado'] = dados_esportes['conteudo_noticia'].apply(tratamento_pln)
+
+# Passo 6: Dividir o texto em partes (chunks)
+# Para controlar o tamanho 
+# Cria um objeto text_splitter da classe RecursiveCharacterTextSplitter com os seguintes parâmetros:
+# chunk_size=200 tamanho máximo dos pedaços de texto (chunks) como 200 caracteres.
+# chunk_overlap=50: os pedaços de texto terão uma sobreposição de 50 caracteres entre eles.
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=50)
+# Cria uma lista de chunks de todos os textos na coluna "conteudo_tratado"
+chunks = [
+    # Itera por cada notícia (linha) na coluna conteudo_tratado
+    chunk for noticia in dados_esportes['conteudo_tratado'] 
+    # Para cada notícia, o split_text divide o texto em partes menores (chunks), 
+    # de acordo com os parâmetros definidos anteriormente (tamanho de 200 caracteres e
+    #  sobreposição de 50 caracteres)
+    for chunk in text_splitter.split_text(noticia)
+]
+# Passo 7: Codificar os pedaços
+# Biblioteca popular para gerar representações vetoriais (embeddings) de sentenças ou
+# trechos de texto, converte textos em vetores numéricos que podem ser usados para tarefas
+# como medir similaridade, agrupamento ou busca semântica.
+from sentence_transformers import SentenceTransformer
+
+# Cria um modelo pré-treinado para gerar embeddings de texto em português (e outras línguas) 
+model = SentenceTransformer('all-MiniLM-L6-v2')
+# Codifica todos os pedaços de texto (chunks) gerados anteriormente da lista "chunks" em vetores
+embeddings = model.encode(chunks)
+# Passo 8: Configurar ChromaDB
+# Biblioteca ara criar e gerenciar bancos de dados vetoriais, ou seja,
+# armazenar e consultar embeddings de texto
+# chromadb facilita a criação de coleções de dados vetoriais permitindo realizar operações,
+# como consulta por similaridade.
+import chromadb
+# converte embeddings gerados pelo modelo SentenceTransformer para o formato adequado que o ChromaDB
+#  Assim, a integração entre o modelo de embeddings e o banco de dados vetorial
+#  se torna direta e simplificada.
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+# Configurar o ChromaDB com a função de embeddings
+# conecta a biblioteca chromadb ao modelo SentenceTransformer, permitindo que o ChromaDB 
+# converta textos em embeddings com base no modelo all-MiniLM-L6-v2.
+embedding_function = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+# O client é a interface principal que você usa para interagir com o ChromaDB
+client = chromadb.Client()
+
+#client.delete_collection("esportes_noticias")
+# Cria uma coleção chamada "esportes_noticias" no ChromaDB
+collection = client.create_collection("esportes_noticias")
+# Adicionar documentos ao banco de dados vetorial
+# Adiciona cada pedaço de texto (chunk) ao banco de dados vetorial.
+for i, chunk in enumerate(chunks):
+    # Adiciona cada chunk à coleção "esportes_noticias" no ChromaDB
+    collection.add(documents=[chunk], metadatas=[{'id': i}], ids=[str(i)])
+# Função para encontrar notícias semelhantes
+def encontrar_similares(texto):
+    # Gerar embeddings para a nova notícia
+    # texto_tratado será o texto limpo e tratado, pronto para ser transformado em um embedding.
+    texto_tratado = tratamento_pln(texto)
+    # Gera um embedding para o texto tratado utilizando o modelo de embeddings SentenceTransformer
+    embedding_novo = model.encode([texto_tratado])
+    
+    # Consultar no ChromaDB
+    # Realiza uma consulta no banco de dados vetorial do ChromaDB 
+    resultados = collection.query(
+        # Passa o embedding da nova notícia como consulta para o banco de dados.
+        query_embeddings=embedding_novo,
+        # Número de resultados que deseja recuperar
+        n_results=5, 
+    )
+    
+    # Contém os textos dos documentos mais semelhantes encontrados no ChromaDB
+    return resultados['documents'], resultados['metadatas']
+# Inspeção dos resultados
+print("Notícias semelhantes:")
+
+# Chamada à função encontrar_similares
+nova_noticia = "O jogador marcou um gol decisivo na final do campeonato."
+encontrar_similares(nova_noticia)
+
+
+
+
+
+
+
+
+

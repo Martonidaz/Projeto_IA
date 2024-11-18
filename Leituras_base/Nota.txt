@@ -1,0 +1,4 @@
+Ruído: pode ser definido como um fenômeno em dados que não é de
+interesse do analista, mas atua como um obstáculo à análise de dados
+Anomalia: Em um nível abstrato, uma anomalia é definida como um padrão que não está em conformidade com o comportamento
+normal esperado.

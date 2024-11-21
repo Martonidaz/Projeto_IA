@@ -1,0 +1,7 @@
+Revisar todo material
+
+2.4 - 
+* Definir a estratégia de chunk mais adequada, com ou sem overlap ? 
+* Qual a técnica de embedding mais adequada ?
+
+

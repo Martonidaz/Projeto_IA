@@ -95,11 +95,13 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 # Codifica todos os pedaços de texto (chunks) gerados anteriormente da lista "chunks" em vetores
 embeddings = model.encode(chunks)
 # Passo 8: Configurar ChromaDB
+
 # Biblioteca ara criar e gerenciar bancos de dados vetoriais, ou seja,
 # armazenar e consultar embeddings de texto
 # chromadb facilita a criação de coleções de dados vetoriais permitindo realizar operações,
 # como consulta por similaridade.
 import chromadb
+
 # converte embeddings gerados pelo modelo SentenceTransformer para o formato adequado que o ChromaDB
 #  Assim, a integração entre o modelo de embeddings e o banco de dados vetorial
 #  se torna direta e simplificada.
@@ -115,6 +117,7 @@ client = chromadb.Client()
 #client.delete_collection("esportes_noticias")
 # Cria uma coleção chamada "esportes_noticias" no ChromaDB
 collection = client.create_collection("esportes_noticias")
+
 # Adicionar documentos ao banco de dados vetorial
 # Adiciona cada pedaço de texto (chunk) ao banco de dados vetorial.
 for i, chunk in enumerate(chunks):
